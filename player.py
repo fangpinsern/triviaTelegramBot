@@ -16,3 +16,6 @@ class Player:
 
     def getScore(self):
         return self.score
+
+    def addPoints(self):
+        self.score = self.score + 1

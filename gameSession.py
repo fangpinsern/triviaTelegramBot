@@ -70,10 +70,20 @@ class GameSession:
             mainKeyboard.append([answer[0].getName()])
 
         return mainKeyboard
+
+    def getPlayerId(self, username):
+        for player in self.players:
+            if player.getName() == username:
+                return player.getChatId()
         
 
     def hasAllAnswered(self):
         return len(self.players) == len(self.answerToQuestions[self.currentQuestionNumber])
+
+    def addPointsToUser(self, username):
+        for player in self.players:
+            if player.getName() == username:
+                player.addPoints()
 
     #owner exclusive commands
     def addQuestion(self, username, question):
