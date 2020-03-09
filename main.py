@@ -42,7 +42,7 @@ startMessage = "Hi! Welcome to my trivia bot!\nTo start a game, use the /startGa
 userGuide = "Yo! Need help? \n /begin - start the game \n /addQuestion - add question to your game \n /endGame - end the game \n /players - get a list of the players who are in the game \n\nYour group name is: \n{}"
 
 gameMasterKeyboard = ReplyKeyboardMarkup([["/begin", "/addQuestion"], ["/players", "/questions"], ["/endGame"]])
-
+gameMasterStartGameKeyboard = ReplyKeyboardMarkup([["/next"], ["/endGame"]])
 
 # General Command
 def start_handler(update: Update, context: CallbackContext):
@@ -103,7 +103,12 @@ def answer_handler(update: Update, context: CallbackContext):
             # store answers somewhere
             game.addAnswer(username, userInput)
             context.bot.sendMessage(
+                    chat_id=game.getOwnerId(), text="{} has answered the question".format(username))
+            context.bot.sendMessage(
                     chat_id=update.effective_user["id"], text="Good Answer! Wait to see if you are right.", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
+            if(game.hasAllAnswered()):
+                context.bot.sendMessage(
+                    chat_id=game.getOwnerId(), text="All answers are in! You can move on to the /next section and choose who gets the right answer!")
         else:
             context.bot.sendMessage(
                     chat_id=update.effective_user["id"], text="Game havent start yet...", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
@@ -135,7 +140,7 @@ def answer_handler(update: Update, context: CallbackContext):
         game.addPointsToUser(userInput)
         playerId = game.getPlayerId(userInput)
         context.bot.sendMessage(
-                chat_id=playerId, text="Great job! +1 point", reply_markup=ReplyKeyboardMarkup[["/exit"]])
+                chat_id=playerId, text="Great job! +1 point", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
         context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="Anymore correct answer? if not /next", reply_markup=ReplyKeyboardMarkup(game.getAnswerKeyboard()))
 
@@ -207,7 +212,7 @@ def begin_handler(update: Update, context: CallbackContext):
                 chat_id=playerChatId, text="The game is about to beign!", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
         game.startGame()
         context.bot.sendMessage(
-                chat_id=update.effective_user["id"], text="Press /next to start with the questions", reply_markup=ReplyKeyboardMarkup([["/next"]]))
+                chat_id=update.effective_user["id"], text="Press /next to start with the questions", reply_markup=gameMasterStartGameKeyboard)
     else:
         context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="You have no access to this", reply_markup=ReplyKeyboardMarkup([["/start"]]))
@@ -227,7 +232,7 @@ def next_handler(update: Update, context: CallbackContext):
                     chat_id=playerChatId, text=question, reply_markup=ReplyKeyboardMarkup([["/exit"]]))
             userSession.update_session(username, "/chooseRightAnswer")
             context.bot.sendMessage(
-                    chat_id=update.effective_user["id"], text="Wait for everyone to answer before pressing /next", reply_markup=ReplyKeyboardMarkup([["/next"]]))
+                    chat_id=update.effective_user["id"], text="Question: {} \nWait for everyone to answer before pressing /next".format(question), reply_markup=gameMasterStartGameKeyboard)
         else:
             
             context.bot.sendMessage(
@@ -253,7 +258,7 @@ def next_handler(update: Update, context: CallbackContext):
             context.bot.sendMessage(
                 chat_id=playerChatId, text="The next question is about to begin", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
         context.bot.sendMessage(
-                chat_id=update.effective_user["id"], text="Press /next for the next question", reply_markup=ReplyKeyboardMarkup([["/next"]]))
+                chat_id=update.effective_user["id"], text="Press /next for the next question", reply_markup=gameMasterStartGameKeyboard)
 
     else:
         context.bot.sendMessage(
@@ -270,6 +275,7 @@ def endGame_handler(update: Update, context: CallbackContext):
                 chat_id=playerChatId, text="The game session has ended", reply_markup=ReplyKeyboardMarkup([["/start"]]))
             userSession.end_session(player.getName())
         players = game.printPlayersInGame()
+        session.endSession(username)
         context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="Thank you for hosting! Here are the final score!\n" + players , reply_markup=ReplyKeyboardMarkup([["/start"]]))
     else:

@@ -17,6 +17,18 @@ class Session:
             validAddSession = True
         return validAddSession
 
+    def endSession (self, username):
+        validEndSession = False
+        for session in self.sessionArr:
+            if session[0] == username:
+                self.sessionArr.remove(session)
+                validEndSession = True
+                break
+
+        return validEndSession
+
+
+
     def addPlayerToGame(self, gamename, username, chatId):
         validGame = False
         if self.isAnOwner(username):
