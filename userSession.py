@@ -61,7 +61,7 @@ class UserSession:
             if session[0] == username:
                 for args in passedArgs:
                     session[2].append(args)
-            break
+                break
         # self.onChange()
 
     def get_passing_arguments(self, username):
@@ -81,7 +81,7 @@ class UserSession:
         str1 = ""
 
         for session in self.sessions:
-            str1 = str1 + session[0] + session[1] + "\n"
+            str1 = str1 + session[0] + session[1] + str(session[2]) + "\n"
 
         return str1
 

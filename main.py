@@ -73,7 +73,6 @@ def startGame_handler(update: Update, context: CallbackContext):
     context.bot.sendMessage(
         chat_id=update.effective_user["id"], text="How would you like to name the group?", reply_markup=ReplyKeyboardMarkup([["/restart"]]))
 
-    
 
 def answer_handler(update: Update, context: CallbackContext):
     username = update.effective_user["username"]
@@ -84,8 +83,9 @@ def answer_handler(update: Update, context: CallbackContext):
         #userInput should be the game name
         validGameName = session.addPlayerToGame(userInput, username, chatId)
         if validGameName:
+            logger.info("User {} joined the game {}".format(update.effective_user["username"], userInput))
             userSession.update_session(username, "/question")
-            userSession.add_passing_arguments(username, [userInput])
+            userSession.add_passing_arguments(username,[userInput])
             context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="You have successfully joined the game. Please wait for the game to start", reply_markup=ReplyKeyboardMarkup([["/restart"]]))
         else:
@@ -93,8 +93,17 @@ def answer_handler(update: Update, context: CallbackContext):
                 chat_id=update.effective_user["id"], text="The game does not exist. Please try again. If you would like to start a game, you can use /startGame", reply_markup=ReplyKeyboardMarkup([["/restart"]]))
 
     elif(userSession.get_last_command(username) == "/question"):
-        context.bot.sendMessage(
-                chat_id=update.effective_user["id"], text="Game havent start yet...", reply_markup=ReplyKeyboardMarkup([["/restart"]]))
+        gameName = userSession.get_passing_arguments(username)[0]
+        game = session.getGamebyGameName(gameName)
+        if game.hasStarted():
+            #userInput is the answer to the question
+            # store answers somewhere
+            game.addAnswer(username, userInput)
+            context.bot.sendMessage(
+                    chat_id=update.effective_user["id"], text="Good Answer! Wait to see if you are right.", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
+        else:
+            context.bot.sendMessage(
+                    chat_id=update.effective_user["id"], text="Game havent start yet...", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
 
     elif(userSession.get_last_command(username) == "/startGame"):
         #userInput should be the new game name
@@ -115,6 +124,14 @@ def answer_handler(update: Update, context: CallbackContext):
         userSession.update_session(username, "/gamemaster")
         context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="Question has been added. To see your questions, use /questions", reply_markup=gameMasterKeyboard)
+    
+    # elif(userSession.get_last_command(username) == "/givepoints"):
+    #     #userInput should be a question
+    #     gameName = userSession.get_passing_arguments(username)[0]
+    #     validAddQuestion = session.addQuestion(username, gameName, userInput)
+    #     userSession.update_session(username, "/gamemaster")
+    #     context.bot.sendMessage(
+    #             chat_id=update.effective_user["id"], text="Question has been added. To see your questions, use /questions", reply_markup=gameMasterKeyboard)
 
     else:
         context.bot.sendMessage(
@@ -170,7 +187,58 @@ def exit_handler(update: Update, context: CallbackContext):
         #         chat_id=game.getOwnerId(), text="Player {} has left the game".format(username))
         context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="Thank you for playing", reply_markup=ReplyKeyboardMarkup([["/start"]]))
+
+def begin_handler(update: Update, context: CallbackContext):
+    username = update.effective_user["username"]
+    logger.info("User {} would like start the game".format(update.effective_user["username"]))
+    if(userSession.get_last_command(username) == "/gamemaster"):
+        game = session.getGamebyOwner(username)
+        listOfPlayers = game.getPlayerList()
+        for player in listOfPlayers:
+            playerChatId = player.getChatId()
+            context.bot.sendMessage(
+                chat_id=playerChatId, text="The game is about to beign!", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
+        game.startGame()
+        context.bot.sendMessage(
+                chat_id=update.effective_user["id"], text="Press /next to start with the questions", reply_markup=ReplyKeyboardMarkup([["/next"]]))
+    else:
+        context.bot.sendMessage(
+                chat_id=update.effective_user["id"], text="You have no access to this", reply_markup=ReplyKeyboardMarkup([["/start"]]))
     
+
+def next_handler(update: Update, context: CallbackContext):
+    username = update.effective_user["username"]
+    if(userSession.get_last_command(username) == "/gamemaster"):
+        game = session.getGamebyOwner(username)
+        if(not game.isLastQn()):
+            game.addAnswerArr()
+            question = game.getCurrentQuestion()
+            listOfPlayers = game.getPlayerList()
+            for player in listOfPlayers:
+                playerChatId = player.getChatId()
+                context.bot.sendMessage(
+                    chat_id=playerChatId, text=question, reply_markup=ReplyKeyboardMarkup([["/exit"]]))
+            userSession.update_session(username, "/chooseRightAnswer")
+            context.bot.sendMessage(
+                    chat_id=update.effective_user["id"], text="Wait for everyone to answer before pressing /next", reply_markup=ReplyKeyboardMarkup([["/next"]]))
+        else:
+            context.bot.sendMessage(
+                    chat_id=update.effective_user["id"], text="You have reached the last question", reply_markup=ReplyKeyboardMarkup([["/endGame"]]))
+    elif (userSession.get_last_command(username) == "/chooseRightAnswer"):
+        game = session.getGamebyOwner(username)
+        userSession.update_session(username, "/givepoints")
+        answers = game.printAnswer()
+        context.bot.sendMessage(
+                    chat_id=update.effective_user["id"], text=answers, reply_markup=ReplyKeyboardMarkup(game.getAnswerKeyboard()))
+
+            
+# def begin_handler(update: Update, context: CallbackContext):
+#     username = update.effective_user["username"]
+
+def print_handler(update: Update, context: CallbackContext):
+    username = update.effective_user["username"]
+    context.bot.sendMessage(
+                    chat_id=update.effective_user["id"], text=userSession.to_string(), reply_markup=ReplyKeyboardMarkup([["/endGame"]]))
 
 
 if __name__ == '__main__':
@@ -185,6 +253,10 @@ if __name__ == '__main__':
     updater.dispatcher.add_handler(CommandHandler("players", seePlayers_handler))
     updater.dispatcher.add_handler(CommandHandler("restart", restart_handler))
     updater.dispatcher.add_handler(CommandHandler("exit", exit_handler))
+    updater.dispatcher.add_handler(CommandHandler("begin", begin_handler))
+    updater.dispatcher.add_handler(CommandHandler("next", next_handler))
     updater.dispatcher.add_handler(MessageHandler(Filters.text, answer_handler))
+
+    updater.dispatcher.add_handler(CommandHandler("print", print_handler))
 
     run(updater)

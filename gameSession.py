@@ -4,8 +4,11 @@ class GameSession:
     owner =""
     ownerId = 0
     gameName=""
+    started = False
     players = []
     listOfQuestions = []
+    answerToQuestions = []
+    currentQuestionNumber = 0
 
     def __init__(self, owner, ownerId, gameName):
         self.owner = owner
@@ -26,6 +29,51 @@ class GameSession:
         for player in self.players:
             if username == player.getName():
                 self.players.remove(player)
+    
+    def nextQuestion(self):
+        qnNum = self.currentQuestionNumber
+        self.currentQuestionNumber = qnNum + 1
+
+    def getCurrentQuestion(self):
+        return self.listOfQuestions[self.currentQuestionNumber]
+    
+    def getPlayerList(self):
+        return self.players
+
+    def isLastQn(self):
+        return len(self.listOfQuestions) == self.currentQuestionNumber
+
+    def startGame(self):
+        self.started = True
+    
+    def hasStarted(self):
+        return self.started
+
+    def addAnswerArr(self):
+        self.answerToQuestions.append([])
+    
+    def addAnswer(self, username, answer):
+        qnNumber = self.currentQuestionNumber
+        for player in self.players:
+            if player.getName() == username:
+                self.answerToQuestions[self.currentQuestionNumber].append([player, answer])
+
+    def printAnswer(self):
+        answerString = ""
+        for answer in self.answerToQuestions[self.currentQuestionNumber]:
+            answerString = answerString + "{} - {}\n".format(answer[0].getName(), answer[1])
+        return answerString
+    
+    def getAnswerKeyboard(self):
+        mainKeyboard = []
+        for answer in self.answerToQuestions[self.currentQuestionNumber]:
+            mainKeyboard.append([answer[0].getName()])
+
+        return mainKeyboard
+        
+
+    def hasAllAnswered(self):
+        return len(self.players) == len(self.answerToQuestions[self.currentQuestionNumber])
 
     #owner exclusive commands
     def addQuestion(self, username, question):
@@ -49,7 +97,7 @@ class GameSession:
         count = 1
         
         for player in self.players:
-            playerString = playerString + "{}. {} ({} points)".format(str(count), player.getName(), player.getScore())
+            playerString = playerString + "{}. {} ({} points)\n".format(str(count), player.getName(), player.getScore())
             count = count + 1
         return playerString
 
@@ -60,7 +108,7 @@ class GameSession:
         count = 1
         
         for question in self.listOfQuestions:
-            questionString = questionString + "{}. {}".format(str(count), question)
+            questionString = questionString + "{}. {}\n".format(str(count), question)
             count = count + 1
         return questionString
             
