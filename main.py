@@ -44,6 +44,17 @@ userGuide = "Yo! Need help? \n /begin - start the game \n /addQuestion - add que
 gameMasterKeyboard = ReplyKeyboardMarkup([["/begin", "/addQuestion"], ["/players", "/questions"], ["/endGame"]])
 gameMasterStartGameKeyboard = ReplyKeyboardMarkup([["/next"], ["/endGame"]])
 
+# Session Values
+# /join - Joins the game
+# /startGame - Starts a new game
+# /gamemaster - gamemaster - you are the gamemaster with control of your game
+# /chooseRightAnswer - gamemaster - view the answers and choose
+# /givepoints - gamemaster - give points for answers you think are correct
+# /addQuestion - gamemaster - add questions to game session
+# /question - player - player in a game session
+
+gameMasterSessionsKeys = ["/gamemaster", "/chooseRightAnswer", "/givepoints", "/addQuestion"]
+
 # General Command
 def start_handler(update: Update, context: CallbackContext):
     username = update.effective_user["username"]
@@ -55,6 +66,9 @@ def start_handler(update: Update, context: CallbackContext):
         
 def join_handler(update: Update, context: CallbackContext):
     username = update.effective_user["username"]
+    if isAGameMaster(userSession.get_last_command(username)):
+        context.bot.sendMessage(
+            chat_id=update.effective_user["id"], text="You are currently hosting a game. To start a new game, end the current game using /endGame")
     logger.info("User {} wants to join a game".format(update.effective_user["username"]))
     userSession.start_session(username, "/join")
     context.bot.sendMessage(
@@ -70,6 +84,9 @@ def restart_handler(update: Update, context: CallbackContext):
 
 def startGame_handler(update: Update, context: CallbackContext):
     username = update.effective_user["username"]
+    if isAGameMaster(userSession.get_last_command(username)):
+        context.bot.sendMessage(
+            chat_id=update.effective_user["id"], text="You are currently hosting a game. To start a new game, end the current game using /endGame")
     logger.info("User {} would like to start game".format(update.effective_user["username"]))
     userSession.start_session(username, "/startGame")
     context.bot.sendMessage(
@@ -286,6 +303,21 @@ def endGame_handler(update: Update, context: CallbackContext):
             
 # def begin_handler(update: Update, context: CallbackContext):
 #     username = update.effective_user["username"]
+
+# Util Function
+def sendMessageToAllPlayers(context: CallbackContext, listOfPlayers, message):
+    validSendMessage = False
+    for player in listOfPlayers:
+        playerChatId = player.getChatId()
+        context.bot.sendMessage(
+            chat_id=playerChatId, text=message, reply_markup=ReplyKeyboardMarkup([["/start"]]))
+        validSendMessage = True
+    return validSendMessage
+
+def isAGameMaster(sessionKey):
+    return sessionKey in gameMasterSessionsKeys
+
+
 
 def print_handler(update: Update, context: CallbackContext):
     username = update.effective_user["username"]
