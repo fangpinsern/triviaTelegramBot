@@ -19,3 +19,6 @@ class Player:
 
     def addPoints(self):
         self.score = self.score + 1
+
+    def toString(self):
+        return "{} ({}points)".format(self.name, self.score)

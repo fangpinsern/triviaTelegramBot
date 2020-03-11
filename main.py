@@ -42,7 +42,7 @@ startMessage = "Hi! Welcome to my trivia bot!\nTo start a game, use the /startGa
 userGuide = "Yo! Need help? \n /begin - start the game \n /addQuestion - add question to your game \n /endGame - end the game \n /players - get a list of the players who are in the game \n\nYour group name is: \n{}"
 
 gameMasterKeyboard = ReplyKeyboardMarkup([["/begin", "/addQuestion"], ["/players", "/questions"], ["/endGame"]])
-gameMasterStartGameKeyboard = ReplyKeyboardMarkup([["/next"], ["/endGame"]])
+gameMasterStartGameKeyboard = ReplyKeyboardMarkup([["/next", "/burden"], ["/endGame"]])
 
 # Session Values
 # /join - Joins the game
@@ -52,6 +52,10 @@ gameMasterStartGameKeyboard = ReplyKeyboardMarkup([["/next"], ["/endGame"]])
 # /givepoints - gamemaster - give points for answers you think are correct
 # /addQuestion - gamemaster - add questions to game session
 # /question - player - player in a game session
+
+# Routes
+# /join -> /question
+# /startGame -> /gamemaster -> {/gamemaster, /chooseRightAnswer, /givepoints, /addQuestion}
 
 gameMasterSessionsKeys = ["/gamemaster", "/chooseRightAnswer", "/givepoints", "/addQuestion"]
 
@@ -219,21 +223,47 @@ def exit_handler(update: Update, context: CallbackContext):
 
 def begin_handler(update: Update, context: CallbackContext):
     username = update.effective_user["username"]
-    logger.info("User {} would like start the game".format(update.effective_user["username"]))
     if(userSession.get_last_command(username) == "/gamemaster"):
+        logger.info("User {} would like start the game".format(update.effective_user["username"]))
         game = session.getGamebyOwner(username)
-        listOfPlayers = game.getPlayerList()
-        for player in listOfPlayers:
-            playerChatId = player.getChatId()
+        if game.hasQuestions():
+            listOfPlayers = game.getPlayerList()
+            # for player in listOfPlayers:
+            #     playerChatId = player.getChatId()
+            #     context.bot.sendMessage(
+            #         chat_id=playerChatId, text="The game is about to beign!", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
+            sendMessageToAllPlayers(context, listOfPlayers, "The game is about to beign!")
+            game.startGame()
             context.bot.sendMessage(
-                chat_id=playerChatId, text="The game is about to beign!", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
-        game.startGame()
-        context.bot.sendMessage(
-                chat_id=update.effective_user["id"], text="Press /next to start with the questions", reply_markup=gameMasterStartGameKeyboard)
+                    chat_id=update.effective_user["id"], text="Press /next to start with the questions", reply_markup=gameMasterStartGameKeyboard)
+        else:
+            context.bot.sendMessage(
+                    chat_id=update.effective_user["id"], text="You do not have any questions! Use /addQuestion to add questions to your game!")
     else:
         context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="You have no access to this", reply_markup=ReplyKeyboardMarkup([["/start"]]))
-    
+
+def burden_handler(update: Update, context: CallbackContext):
+    username = update.effective_user["username"]
+    if isAGameMaster(userSession.get_last_command(username)):
+        logger.info("User {} would like to check for burden".format(username))
+        game = session.getGamebyOwner(username)
+        if(game.hasStarted()):
+            if(game.hasAllAnswered()):
+                context.bot.sendMessage(chat_id=update.effective_user["id"], text="Everyone has answered. You can move on with /next")
+            else:
+                listOfBurdens = game.getListOfUnansweredPlayersForCurrentQuestion()
+                sendMessageToAllPlayers(context, listOfBurdens, "Don't be a burden. Faster answer pls")
+                context.bot.sendMessage(
+                    chat_id=update.effective_user["id"], text=game.printListOfPlayers(listOfBurdens, "Burdens:"))
+        else:
+            context.bot.sendMessage(chat_id=update.effective_user["id"], text="Game hasnt even started... Use /begin to start the game")
+
+    else:
+        context.bot.sendMessage(
+                chat_id=update.effective_user["id"], text="You have no access to this")
+
+
 
 def next_handler(update: Update, context: CallbackContext):
     username = update.effective_user["username"]
@@ -345,6 +375,7 @@ if __name__ == '__main__':
     updater.dispatcher.add_handler(CommandHandler("begin", begin_handler))
     updater.dispatcher.add_handler(CommandHandler("next", next_handler))
     updater.dispatcher.add_handler(CommandHandler("endGame", endGame_handler))
+    updater.dispatcher.add_handler(CommandHandler("burden", burden_handler))
     updater.dispatcher.add_handler(MessageHandler(Filters.text, answer_handler))
 
     # Debug command

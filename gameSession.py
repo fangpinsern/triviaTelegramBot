@@ -48,10 +48,14 @@ class GameSession:
     
     def hasStarted(self):
         return self.started
+    
+    def hasQuestions(self):
+        return len(self.listOfQuestions) > 0
 
     def addAnswerArr(self):
         self.answerToQuestions.append([])
     
+    # Answer format - [player, answer]
     def addAnswer(self, username, answer):
         qnNumber = self.currentQuestionNumber
         for player in self.players:
@@ -71,6 +75,18 @@ class GameSession:
 
         return mainKeyboard
 
+    def getAnswerForCurrentQuestion(self):
+        return self.answerToQuestions[self.currentQuestionNumber]
+
+    def getListOfUnansweredPlayersForCurrentQuestion(self):
+        playersWhoAnswered = []
+        for answer in self.answerToQuestions[self.currentQuestionNumber]:
+            playersWhoAnswered.append(answer[0])
+        
+        playersWhoHaventAnswered = list(set(self.players) - set(playersWhoAnswered))
+        return playersWhoHaventAnswered
+        
+    
     def getPlayerId(self, username):
         for player in self.players:
             if player.getName() == username:
@@ -107,7 +123,7 @@ class GameSession:
         count = 1
         
         for player in self.players:
-            playerString = playerString + "{}. {} ({} points)\n".format(str(count), player.getName(), player.getScore())
+            playerString = playerString + "{}. {}\n".format(str(count), player.toString())
             count = count + 1
         return playerString
 
@@ -121,4 +137,16 @@ class GameSession:
             questionString = questionString + "{}. {}\n".format(str(count), question)
             count = count + 1
         return questionString
+
+    def printListOfPlayers(self, listOfPlayers, title):
+        if len(listOfPlayers) == 0:
+            return "There is no on in the list"
+        else:
+            playerString = title + "\n"
+            count = 1
+            
+            for player in listOfPlayers:
+                playerString = playerString + "{}. {}".format(str(count), player.toString())
+                count = count + 1
+            return playerString
             
