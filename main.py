@@ -1,7 +1,8 @@
 import logging
 import os
-
 import sys
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 from session import Session
 from userSession import UserSession
@@ -33,6 +34,12 @@ else:
     logger.error("No MODE specified!")
     sys.exit(1)
 
+# Initialize the client for google sheet API
+scope = ['https://spreadsheets.google.com/feeds',
+         'https://www.googleapis.com/auth/drive']
+creds = ServiceAccountCredentials.from_json_keyfile_name('client-secret.json', scope)
+client = gspread.authorize(creds)
+
 #startbotSession
 session = Session()
 userSession = UserSession()
@@ -41,8 +48,14 @@ userSession = UserSession()
 startMessage = "Hi! Welcome to my trivia bot!\nTo start a game, use the /startGame command. \nTo join a game, use the /join command! \n\n Please be gentle. I am fragile"
 userGuide = "Yo! Need help? \n /begin - start the game \n /addQuestion - add question to your game \n /endGame - end the game \n /players - get a list of the players who are in the game \n\nYour group name is: \n{}"
 
-gameMasterKeyboard = ReplyKeyboardMarkup([["/begin", "/addQuestion"], ["/players", "/questions"], ["/endGame"]])
+addQuestionBySheetGuide = "Please follow these steps precisely. If not I may die hahaha.\nStep 1:\nShare the google sheet with my email trivaiquestionloader@triviatelegrambot.iam.gserviceaccount.com\nStep 2:\nSend me the URL!\n\nJust a reminder that the question sheet has to follow the stipulated format!"
+
+invalidCommandMessage = "You have no access to this command! Didnt I ask you to be gentle? \n/restart to try again if you are stuck"
+
+gameMasterKeyboard = ReplyKeyboardMarkup([["/begin", "/addQuestion"], ["/players", "/questions"], ["/addQnByGoogleSheet"], ["/endGame"]])
 gameMasterStartGameKeyboard = ReplyKeyboardMarkup([["/next", "/burden"], ["/endGame"]])
+
+playerInGameKeyboard = ReplyKeyboardMarkup([["/exit"]])
 
 # Session Values
 # /join - Joins the game
@@ -105,13 +118,17 @@ def answer_handler(update: Update, context: CallbackContext):
     
     if(userSession.get_last_command(username) == "/join"):
         #userInput should be the game name
-        validGameName = session.addPlayerToGame(userInput, username, chatId)
-        if validGameName:
+        game = session.getGamebyGameName(userInput)
+        if game:
+            game.addPlayer(username, chatId)
             logger.info("User {} joined the game {}".format(update.effective_user["username"], userInput))
             userSession.update_session(username, "/question")
             userSession.add_passing_arguments(username,[userInput])
             context.bot.sendMessage(
-                chat_id=update.effective_user["id"], text="You have successfully joined the game. Please wait for the game to start", reply_markup=ReplyKeyboardMarkup([["/restart"]]))
+                chat_id=update.effective_user["id"], text="You have successfully joined the game. Please wait for the game to start", reply_markup=playerInGameKeyboard)
+            context.bot.sendMessage(
+                chat_id=game.getOwnerId(), text="{} joined the game.".format(username))
+
         else:
             context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="The game does not exist. Please try again. If you would like to start a game, you can use /startGame", reply_markup=ReplyKeyboardMarkup([["/restart"]]))
@@ -120,19 +137,19 @@ def answer_handler(update: Update, context: CallbackContext):
         gameName = userSession.get_passing_arguments(username)[0]
         game = session.getGamebyGameName(gameName)
         if game.hasStarted():
-            #userInput is the answer to the question
+            # userInput is the answer to the question
             # store answers somewhere
             game.addAnswer(username, userInput)
             context.bot.sendMessage(
                     chat_id=game.getOwnerId(), text="{} has answered the question".format(username))
             context.bot.sendMessage(
-                    chat_id=update.effective_user["id"], text="Good Answer! Wait to see if you are right.", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
+                    chat_id=update.effective_user["id"], text="Good Answer! Wait to see if you are right.", reply_markup=playerInGameKeyboard)
             if(game.hasAllAnswered()):
                 context.bot.sendMessage(
                     chat_id=game.getOwnerId(), text="All answers are in! You can move on to the /next section and choose who gets the right answer!")
         else:
             context.bot.sendMessage(
-                    chat_id=update.effective_user["id"], text="Game havent start yet...", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
+                    chat_id=update.effective_user["id"], text="Game havent start yet...", reply_markup=playerInGameKeyboard)
 
     elif(userSession.get_last_command(username) == "/startGame"):
         #userInput should be the new game name
@@ -154,6 +171,25 @@ def answer_handler(update: Update, context: CallbackContext):
         context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="Question has been added. To see your questions, use /questions", reply_markup=gameMasterKeyboard)
     
+    elif(userSession.get_last_command(username) == "/addQuestionSheet"):
+        #userInput should be the link to the sheet
+        gameName = userSession.get_passing_arguments(username)[0]
+        sheet = client.open_by_url(userInput).get_worksheet(0)
+        listOfQuestions = sheet.get_all_records()
+        validGame = session.getGamebyOwner(username)
+        if validGame:
+            for questionJ in listOfQuestions:
+                qn = questionJ['Questions']
+                validGame.addQuestion(username, qn)
+            userSession.update_session(username, "/gamemaster")
+            context.bot.sendMessage(
+                chat_id=update.effective_user["id"], text="Question from sheet has been added! To see your questions, use /questions", reply_markup=gameMasterKeyboard)
+
+        else:
+            logger.info("User {} tried to add questions when he/she is not allowed to!").format(username)
+            context.bot.sendMessage(
+                chat_id=update.effective_user["id"], text=invalidCommandMessage)
+
     elif(userSession.get_last_command(username) == "/givepoints"):
         #userInput should be a the user with the correct answer
         gameName = userSession.get_passing_arguments(username)[0]
@@ -161,7 +197,7 @@ def answer_handler(update: Update, context: CallbackContext):
         game.addPointsToUser(userInput)
         playerId = game.getPlayerId(userInput)
         context.bot.sendMessage(
-                chat_id=playerId, text="Great job! +1 point", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
+                chat_id=playerId, text="Great job! +1 point", reply_markup=playerInGameKeyboard)
         context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="Anymore correct answer? if not /next", reply_markup=ReplyKeyboardMarkup(game.getAnswerKeyboard()))
 
@@ -179,13 +215,23 @@ def addQuestion_handler(update: Update, context: CallbackContext):
             chat_id=update.effective_user["id"], text="Please type in your question. Remember to add the question mark!", reply_markup=ReplyKeyboardRemove())
     else:
         context.bot.sendMessage(
-            chat_id=update.effective_user["id"], text="You cannot add questions", reply_markup=ReplyKeyboardMarkup([["/restart"]]))
+            chat_id=update.effective_user["id"], text=invalidCommandMessage, reply_markup=ReplyKeyboardMarkup([["/restart"]]))
         
+def addQuestionBySheet_handler(update: Update, context: CallbackContext):
+    username = update.effective_user["username"]
+    logger.info("User {} would like to add question using a google sheet".format(username))
+    if (userSession.get_last_command(username) == "/gamemaster"):
+        userSession.update_session(username, "/addQuestionSheet")
+        context.bot.sendMessage(
+            chat_id=update.effective_user["id"], text=addQuestionBySheetGuide, reply_markup=ReplyKeyboardRemove())
+    else:
+        context.bot.sendMessage(
+            chat_id=update.effective_user["id"], text=invalidCommandMessage, reply_markup=ReplyKeyboardMarkup([["/restart"]]))
+
 def seePlayers_handler(update: Update, context: CallbackContext):
     username = update.effective_user["username"]
     logger.info("User {} would like to see the players".format(update.effective_user["username"]))
     if (userSession.get_last_command(username) == "/gamemaster"):
-        # userSession.update_session("/addQuestion")
         game = session.getGamebyOwner(username)
         players = game.printPlayersInGame()
         context.bot.sendMessage(
@@ -196,9 +242,8 @@ def seePlayers_handler(update: Update, context: CallbackContext):
 
 def seeQuestions_handler(update: Update, context: CallbackContext):
     username = update.effective_user["username"]
-    logger.info("User {} would like to see the players".format(update.effective_user["username"]))
+    logger.info("User {} would like to see the questions".format(update.effective_user["username"]))
     if (userSession.get_last_command(username) == "/gamemaster"):
-        # userSession.update_session("/addQuestion")
         game = session.getGamebyOwner(username)
         questions = game.printQuestionsInGame()
         context.bot.sendMessage(
@@ -226,19 +271,23 @@ def begin_handler(update: Update, context: CallbackContext):
     if(userSession.get_last_command(username) == "/gamemaster"):
         logger.info("User {} would like start the game".format(update.effective_user["username"]))
         game = session.getGamebyOwner(username)
-        if game.hasQuestions():
+        if game.hasQuestions() and game.hasPlayers():
             listOfPlayers = game.getPlayerList()
-            # for player in listOfPlayers:
-            #     playerChatId = player.getChatId()
-            #     context.bot.sendMessage(
-            #         chat_id=playerChatId, text="The game is about to beign!", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
             sendMessageToAllPlayers(context, listOfPlayers, "The game is about to beign!")
             game.startGame()
             context.bot.sendMessage(
                     chat_id=update.effective_user["id"], text="Press /next to start with the questions", reply_markup=gameMasterStartGameKeyboard)
         else:
-            context.bot.sendMessage(
-                    chat_id=update.effective_user["id"], text="You do not have any questions! Use /addQuestion to add questions to your game!")
+            if not game.hasQuestions():
+                context.bot.sendMessage(
+                        chat_id=update.effective_user["id"], text="You do not have any questions! Use /addQuestion to add questions to your game!")
+            elif not game.hasPlayers():
+                context.bot.sendMessage(
+                        chat_id=update.effective_user["id"], text="You do not have any players!! Get your friends to join the game!! Your game name is: \n{}".format(game.getGameName()))
+            else:
+                context.bot.sendMessage(
+                        chat_id=update.effective_user["id"], text="Idk what happened that you cannot start hahaha. Make sure you have questions and players!")
+
     else:
         context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="You have no access to this", reply_markup=ReplyKeyboardMarkup([["/start"]]))
@@ -248,6 +297,7 @@ def burden_handler(update: Update, context: CallbackContext):
     if isAGameMaster(userSession.get_last_command(username)):
         logger.info("User {} would like to check for burden".format(username))
         game = session.getGamebyOwner(username)
+
         if(game.hasStarted()):
             if(game.hasAllAnswered()):
                 context.bot.sendMessage(chat_id=update.effective_user["id"], text="Everyone has answered. You can move on with /next")
@@ -276,7 +326,7 @@ def next_handler(update: Update, context: CallbackContext):
             for player in listOfPlayers:
                 playerChatId = player.getChatId()
                 context.bot.sendMessage(
-                    chat_id=playerChatId, text=question, reply_markup=ReplyKeyboardMarkup([["/exit"]]))
+                    chat_id=playerChatId, text=question, reply_markup=playerInGameKeyboard)
             userSession.update_session(username, "/chooseRightAnswer")
             context.bot.sendMessage(
                     chat_id=update.effective_user["id"], text="Question: {} \nWait for everyone to answer before pressing /next".format(question), reply_markup=gameMasterStartGameKeyboard)
@@ -303,7 +353,7 @@ def next_handler(update: Update, context: CallbackContext):
         for player in listOfPlayers:
             playerChatId = player.getChatId()
             context.bot.sendMessage(
-                chat_id=playerChatId, text="The next question is about to begin", reply_markup=ReplyKeyboardMarkup([["/exit"]]))
+                chat_id=playerChatId, text="The next question is about to begin", reply_markup=playerInGameKeyboard)
         context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="Press /next for the next question", reply_markup=gameMasterStartGameKeyboard)
 
@@ -313,7 +363,7 @@ def next_handler(update: Update, context: CallbackContext):
 
 def endGame_handler(update: Update, context: CallbackContext):
     username = update.effective_user["username"]
-    if userSession.get_last_command(username) == "/gamemaster":
+    if isAGameMaster(userSession.get_last_command(username)):
         game = session.getGamebyOwner(username)
         listOfPlayers = game.getPlayerList()
         for player in listOfPlayers:
@@ -322,7 +372,9 @@ def endGame_handler(update: Update, context: CallbackContext):
                 chat_id=playerChatId, text="The game session has ended", reply_markup=ReplyKeyboardMarkup([["/start"]]))
             userSession.end_session(player.getName())
         players = game.printPlayersInGame()
+        game.endGame()
         session.endSession(username)
+        userSession.end_session(username)
         context.bot.sendMessage(
                 chat_id=update.effective_user["id"], text="Thank you for hosting! Here are the final score!\n" + players , reply_markup=ReplyKeyboardMarkup([["/start"]]))
     else:
@@ -330,9 +382,6 @@ def endGame_handler(update: Update, context: CallbackContext):
                 chat_id=update.effective_user["id"], text="You have no access to this")
 
 
-            
-# def begin_handler(update: Update, context: CallbackContext):
-#     username = update.effective_user["username"]
 
 # Util Function
 def sendMessageToAllPlayers(context: CallbackContext, listOfPlayers, message):
@@ -376,6 +425,7 @@ if __name__ == '__main__':
     updater.dispatcher.add_handler(CommandHandler("next", next_handler))
     updater.dispatcher.add_handler(CommandHandler("endGame", endGame_handler))
     updater.dispatcher.add_handler(CommandHandler("burden", burden_handler))
+    updater.dispatcher.add_handler(CommandHandler("addQnByGoogleSheet", addQuestionBySheet_handler))
     updater.dispatcher.add_handler(MessageHandler(Filters.text, answer_handler))
 
     # Debug command

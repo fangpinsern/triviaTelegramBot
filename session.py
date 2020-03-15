@@ -5,8 +5,8 @@ class Session:
     
     sessionArr = []
 
-    def __init__(self):
-        self.addSession("hellostups", 0, "fang")
+    # def __init__(self):
+    #     self.addSession("hellostups", 0, "fang")
 
     #session [owner, gamename, newGame]
     def addSession(self, owner, ownerId, gamename):
@@ -21,6 +21,8 @@ class Session:
         validEndSession = False
         for session in self.sessionArr:
             if session[0] == username:
+                # session[2].endGame()
+                # del session
                 self.sessionArr.remove(session)
                 validEndSession = True
                 break

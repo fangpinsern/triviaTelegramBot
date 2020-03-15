@@ -14,12 +14,30 @@ class GameSession:
         self.owner = owner
         self.gameName = gameName
         self.ownerId = ownerId
+        self.started = False
+        self.players = []
+        self.listOfQuestions = []
+        self.answerToQuestions = []
+        self.currentQuestionNumber = 0
 
+    def endGame(self):
+        self.owner =""
+        self.ownerId = 0
+        self.gameName=""
+        self.started = False
+        self.players = []
+        self.listOfQuestions = []
+        self.answerToQuestions = []
+        self.currentQuestionNumber = 0
+        
     def isOwner(self, ownername):
         return self.owner == ownername
 
     def getOwnerId(self):
         return self.ownerId
+
+    def getGameName(self):
+        return self.gameName
     
     def addPlayer(self, username, chatId):
         newPlayer  = Player(username, chatId)
@@ -52,12 +70,14 @@ class GameSession:
     def hasQuestions(self):
         return len(self.listOfQuestions) > 0
 
+    def hasPlayers(self):
+        return len(self.players) > 0
+
     def addAnswerArr(self):
         self.answerToQuestions.append([])
     
     # Answer format - [player, answer]
     def addAnswer(self, username, answer):
-        qnNumber = self.currentQuestionNumber
         for player in self.players:
             if player.getName() == username:
                 self.answerToQuestions[self.currentQuestionNumber].append([player, answer])
